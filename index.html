@@ -9,11 +9,15 @@
     header { background: #0056b3; color: white; padding: 20px; text-align: center; }
     .container { max-width: 800px; margin: auto; padding: 20px; }
     
-    /* Search Bar */
-    .search-box { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; gap: 10px; margin-bottom: 20px; }
-    .search-box input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 16px; }
-    .search-box button { padding: 10px 20px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; font-weight: bold; }
-    .search-box button:hover { background: #218838; }
+    /* Search Box Styles */
+    .search-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
+    .search-row { display: flex; gap: 10px; }
+    .search-row input { flex: 1; padding: 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 15px; }
+    .search-row button { padding: 12px 20px; background: #28a745; color: white; border: none; border-radius: 4px; font-size: 15px; cursor: pointer; font-weight: bold; }
+    .search-row button:hover { background: #218838; }
+
+    .gps-btn { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 15px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .gps-btn:hover { background: #0056b3; }
 
     /* Listing Card */
     .card { background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; overflow: hidden; display: flex; flex-direction: column; }
@@ -48,10 +52,14 @@
 
   <div class="container">
     
-    <!-- Search Filter -->
+    <!-- Upgraded Search Controls -->
     <div class="search-box">
-      <input type="text" id="pin-search" placeholder="Search by PIN Code (e.g., 741251)" maxlength="6">
-      <button onclick="loadListings()">Search</button>
+      <button class="gps-btn" onclick="searchByCurrentLocation()">📍 Use My Current Location (Nearby)</button>
+      <div style="text-align: center; font-size: 13px; color: #666; font-weight: bold;">— OR SEARCH MANUALLY —</div>
+      <div class="search-row">
+        <input type="text" id="text-search" placeholder="Search by City, Area, District or PIN (e.g., Kalyani, 741251)">
+        <button onclick="loadListings()">Search</button>
+      </div>
     </div>
 
     <div id="listings-container">
@@ -68,23 +76,80 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV5eXBlY2pmb2xyeXhtcnh5ZXJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMDQ0MzQsImV4cCI6MjEwNjY4MDQzNH0.eKmcvnL_s29ulbi5_lLtMVUL0k2wxPqu-27404yoSTI';
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // Haversine formula to calculate distance in kilometers between two GPS points
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371; // Radius of the earth in km
+      const dLat = (lat2 - lat1) * (Math.PI / 180);
+      const dLon = (lon2 - lon1) * (Math.PI / 180);
+      const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * 
+        Math.sin(dLon / 2) * Math.sin(dLon / 2); 
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); 
+      return R * c; // Distance in km
+    }
+
+    // Search by Device GPS Location
+    function searchByCurrentLocation() {
+      const container = document.getElementById('listings-container');
+      
+      if (!navigator.geolocation) {
+        alert("Geolocation is not supported by your browser");
+        return;
+      }
+
+      container.innerHTML = '<div id="loading">Detecting your location & finding nearby washrooms...</div>';
+
+      navigator.geolocation.getCurrentPosition(async (position) => {
+        const userLat = position.coords.latitude;
+        const userLng = position.coords.longitude;
+
+        const { data, error } = await supabaseClient
+          .from('listings')
+          .select('*')
+          .eq('status', 'approved');
+
+        if (error) {
+          container.innerHTML = `<p style="color:red; text-align:center;">Error: ${error.message}</p>`;
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          container.innerHTML = `<p style="text-align:center; color:#666;">No approved washrooms available.</p>`;
+          return;
+        }
+
+        // Calculate distance and attach it to each listing
+        const listingsWithDistance = data.map(item => {
+          let dist = 99999;
+          if (item.lat && item.lng) {
+            dist = calculateDistance(userLat, userLng, item.lat, item.lng);
+          }
+          return { ...item, distance: dist };
+        });
+
+        // Sort by closest distance first
+        listingsWithDistance.sort((a, b) => a.distance - b.distance);
+
+        renderListings(listingsWithDistance, true);
+
+      }, (err) => {
+        container.innerHTML = `<p style="color:red; text-align:center;">Unable to retrieve your location. Please check browser permissions or use manual search.</p>`;
+      }, { timeout: 10000 });
+    }
+
+    // Standard Search (Manual Text / PIN or All)
     async function loadListings() {
       const container = document.getElementById('listings-container');
-      const pinQuery = document.getElementById('pin-search').value.trim();
+      const searchQuery = document.getElementById('text-search').value.trim().toLowerCase();
       
       container.innerHTML = '<div id="loading">Searching washrooms...</div>';
 
-      // Base query: Only fetch items where status is approved
       let query = supabaseClient
         .from('listings')
         .select('*')
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
-
-      // If user typed a PIN code, filter by it
-      if (pinQuery) {
-        query = query.eq('pin', pinQuery);
-      }
 
       const { data, error } = await query;
 
@@ -92,6 +157,30 @@
         container.innerHTML = `<p style="color:red; text-align:center;">Error loading listings: ${error.message}</p>`;
         return;
       }
+
+      if (!data || data.length === 0) {
+        container.innerHTML = `<p style="text-align:center; color:#666;">No approved washrooms found.</p>`;
+        return;
+      }
+
+      // Filter locally if a search query was typed (matches PIN, Address, City, Name, or Business Name)
+      let filteredData = data;
+      if (searchQuery) {
+        filteredData = data.filter(item => 
+          (item.pin && item.pin.toLowerCase().includes(searchQuery)) ||
+          (item.addr && item.addr.toLowerCase().includes(searchQuery)) ||
+          (item.name && item.name.toLowerCase().includes(searchQuery)) ||
+          (item.business_name && item.business_name.toLowerCase().includes(searchQuery)) ||
+          (item.host_category && item.host_category.toLowerCase().includes(searchQuery))
+        );
+      }
+
+      renderListings(filteredData, false);
+    }
+
+    // Render listings into HTML cards
+    function renderListings(data, showDistance) {
+      const container = document.getElementById('listings-container');
 
       if (data.length === 0) {
         container.innerHTML = `<p style="text-align:center; color:#666;">No approved washrooms found matching your search.</p>`;
@@ -115,6 +204,11 @@
           photoHtml = item.property_photos.map(url => `<img src="${url}" alt="Washroom Photo">`).join('');
         }
 
+        let distanceText = '';
+        if (showDistance && item.distance !== undefined && item.distance < 99999) {
+          distanceText = `<span style="background: #e2f0cb; color: #2d6a4f; padding: 2px 6px; border-radius: 4px; font-size: 12px; font-weight: bold;">📍 ~${item.distance.toFixed(1)} km away</span>`;
+        }
+
         const card = `
           <div class="card">
             <div class="card-header">
@@ -125,8 +219,11 @@
               
               <div class="host-section">
                 <img src="${item.host_photo_url || 'https://via.placeholder.com/50'}" class="host-img" alt="Host">
-                <div>
-                  <h3 style="margin:0 0 4px 0; color:#0056b3;">${title}</h3>
+                <div style="flex:1;">
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3 style="margin:0 0 4px 0; color:#0056b3;">${title}</h3>
+                    ${distanceText}
+                  </div>
                   <small style="color:#666;">Hosted by: ${item.name} | Access: <b>${item.who}</b></small>
                 </div>
               </div>
@@ -161,7 +258,7 @@
       });
     }
 
-    // Load all approved listings when page opens
+    // Load all approved listings when page opens initially
     loadListings();
   </script>
 </body>
