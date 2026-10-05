@@ -30,7 +30,10 @@
     .tag { background: #e9ecef; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: #495057; }
     .facilities { margin-top: 10px; display: flex; gap: 5px; flex-wrap: wrap; }
     
-    .call-btn { display: block; width: 100%; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 10px; border-radius: 4px; margin-top: 15px; font-weight: bold; box-sizing: border-box; }
+    .button-row { display: flex; gap: 10px; margin-top: 15px; }
+    .map-btn { flex: 1; text-align: center; background: #28a745; color: white; text-decoration: none; padding: 10px; border-radius: 4px; font-weight: bold; box-sizing: border-box; }
+    .map-btn:hover { background: #218838; }
+    .call-btn { flex: 1; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 10px; border-radius: 4px; font-weight: bold; box-sizing: border-box; }
     .call-btn:hover { background: #0056b3; }
     
     #loading { text-align: center; font-size: 16px; color: #666; margin-top: 40px; }
@@ -100,7 +103,6 @@
       data.forEach(item => {
         const title = item.host_category === 'commercial' && item.business_name ? item.business_name : item.name;
         
-        // Build facility tags HTML
         let facilityTags = '';
         if (item.facilities && item.facilities.length > 0) {
           facilityTags = item.facilities.map(f => `<span class="tag">✓ ${f}</span>`).join(' ');
@@ -108,7 +110,6 @@
           facilityTags = '<span class="tag">Standard Facilities</span>';
         }
 
-        // Build property photo gallery HTML
         let photoHtml = '';
         if (item.property_photos && item.property_photos.length > 0) {
           photoHtml = item.property_photos.map(url => `<img src="${url}" alt="Washroom Photo">`).join('');
@@ -122,7 +123,6 @@
             </div>
             <div class="card-body">
               
-              <!-- Host Info -->
               <div class="host-section">
                 <img src="${item.host_photo_url || 'https://via.placeholder.com/50'}" class="host-img" alt="Host">
                 <div>
@@ -131,7 +131,6 @@
                 </div>
               </div>
 
-              <!-- Location & Timings -->
               <div class="details-row">
                 <span>📍 <b>Address:</b> ${item.addr}, PIN: ${item.pin}</span>
               </div>
@@ -139,19 +138,20 @@
                 <span>🕒 <b>Timings:</b> ${item.open} - ${item.close}</span>
               </div>
 
-              <!-- Facilities -->
               <div class="facilities">
                 ${facilityTags}
               </div>
 
-              <!-- Photos -->
               <p style="margin: 15px 0 5px 0; font-size: 13px; font-weight: bold;">Property Photos:</p>
               <div class="photo-grid">
                 ${photoHtml}
               </div>
 
-              <!-- Contact Button -->
-              <a href="tel:${item.phone}" class="call-btn">📞 Call Host (${item.phone})</a>
+              <!-- Map Navigation & Call Buttons -->
+              <div class="button-row">
+                ${item.lat && item.lng ? `<a href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}" target="_blank" class="map-btn">🗺️ Get Directions</a>` : ''}
+                <a href="tel:${item.phone}" class="call-btn">📞 Call Host</a>
+              </div>
 
             </div>
           </div>
